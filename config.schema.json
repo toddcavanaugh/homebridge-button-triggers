@@ -1,0 +1,167 @@
+{
+  "pluginAlias": "ButtonTriggers",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Expose virtual Homebridge buttons and switches that respond to local HTTP requests.",
+  "footerDisplay": "For new installs, switches are usually the best fit for visible Apple Home controls. Legacy button routes are available for migration but disabled by default.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Button Triggers",
+        "description": "Label used in Homebridge logs."
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "0.0.0.0",
+        "description": "Bind address for the local HTTP server."
+      },
+      "port": {
+        "title": "Port",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 65535,
+        "default": 3001,
+        "description": "Port used for inbound HTTP requests."
+      },
+      "authToken": {
+        "title": "Auth token",
+        "type": "string",
+        "description": "Optional bearer token or ?token value required for trigger and switch routes."
+      },
+      "legacyRoutes": {
+        "title": "Enable legacy button routes",
+        "type": "boolean",
+        "default": false,
+        "description": "Expose /button-:id routes compatible with homebridge-button-platform. Leave off for new installs."
+      },
+      "buttons": {
+        "title": "Buttons",
+        "type": "array",
+        "items": {
+          "title": "Button",
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "ID",
+              "type": "string",
+              "description": "Stable identifier used for routes and accessory identity."
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "description": "Display name shown in Apple Home. Defaults to the ID when omitted."
+            }
+          },
+          "required": ["id"]
+        }
+      },
+      "switches": {
+        "title": "Switches",
+        "type": "array",
+        "items": {
+          "title": "Switch",
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "ID",
+              "type": "string",
+              "description": "Stable identifier used for routes and accessory identity."
+            },
+            "name": {
+              "title": "Name",
+              "type": "string",
+              "description": "Display name shown in Apple Home. Defaults to the ID when omitted."
+            },
+            "mode": {
+              "title": "Mode",
+              "type": "string",
+              "default": "stateful",
+              "enum": ["stateful", "momentary"]
+            },
+            "resetAfterMs": {
+              "title": "Reset after (ms)",
+              "type": "integer",
+              "minimum": 1,
+              "default": 1000,
+              "description": "Used when mode is momentary."
+            },
+            "defaultState": {
+              "title": "Default state",
+              "type": "boolean",
+              "default": false,
+              "description": "State restored after a momentary switch resets."
+            }
+          },
+          "required": ["id"]
+        }
+      }
+    }
+  },
+  "layout": [
+    {
+      "type": "flex",
+      "flex-flow": "row wrap",
+      "items": ["name", "host", "port", "legacyRoutes", "authToken"]
+    },
+    {
+      "key": "buttons",
+      "type": "array",
+      "title": "Buttons",
+      "items": [
+        {
+          "type": "div",
+          "displayFlex": true,
+          "flex-direction": "row",
+          "items": [
+            {
+              "key": "buttons[].id",
+              "flex": "1 1 160px"
+            },
+            {
+              "key": "buttons[].name",
+              "flex": "1 1 220px"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "switches",
+      "type": "array",
+      "title": "Switches",
+      "items": [
+        {
+          "type": "div",
+          "displayFlex": true,
+          "flex-direction": "row",
+          "items": [
+            {
+              "key": "switches[].id",
+              "flex": "1 1 140px"
+            },
+            {
+              "key": "switches[].name",
+              "flex": "1 1 180px"
+            },
+            {
+              "key": "switches[].mode",
+              "flex": "1 1 120px"
+            },
+            {
+              "key": "switches[].resetAfterMs",
+              "flex": "1 1 100px"
+            },
+            {
+              "key": "switches[].defaultState",
+              "flex": "1 1 100px"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
