@@ -14,8 +14,7 @@
     "url": "https://github.com/toddcavanaugh/homebridge-button-triggers/issues"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "type": "commonjs",
   "main": "dist/index.js",

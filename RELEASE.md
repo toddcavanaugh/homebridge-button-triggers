@@ -29,6 +29,8 @@ npm publish
 
 If this is the first publish from a scoped package, use `--access public`.
 
+Note: local terminal publishes should not force npm provenance. If we want provenance later, publish from a supported CI workflow instead of a local shell.
+
 ## Create the GitHub release
 For every published version:
 1. Create a Git tag matching the package version.
