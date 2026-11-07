@@ -46,3 +46,9 @@ test("coerces booleans from common request values", () => {
   assert.equal(coerceBoolean(0), false);
   assert.equal(coerceBoolean("maybe"), undefined);
 });
+
+test("prototype names cannot become button events", () => {
+  for (const event of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+    assert.equal(normalizeButtonEvent(event), undefined);
+  }
+});
