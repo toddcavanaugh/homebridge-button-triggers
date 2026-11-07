@@ -40,6 +40,8 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
   private readonly stateStore: StateStore;
   private server: Server | undefined;
   private disabled = false;
+  private shuttingDown = false;
+  private launchTask: Promise<void> = Promise.resolve();
 
   constructor(
     readonly log: Logger,
@@ -66,16 +68,16 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
     }
 
     this.api.on(APIEvent.DID_FINISH_LAUNCHING, () => {
-      void this.handleDidFinishLaunching();
+      this.launchTask = this.handleDidFinishLaunching();
     });
 
     this.api.on(APIEvent.SHUTDOWN, () => {
-      void this.handleShutdown();
+      void this.handleShutdown().catch(error => this.log.error("Shutdown failed: %s", this.formatError(error)));
     });
   }
 
-  configureAccessory(accessory: PlatformAccessory<AccessoryContext>): void {
-    this.cachedAccessories.set(accessory.UUID, accessory);
+  configureAccessory(accessory: PlatformAccessory): void {
+    this.cachedAccessories.set(accessory.UUID, accessory as PlatformAccessory<AccessoryContext>);
   }
 
   private async handleDidFinishLaunching(): Promise<void> {
@@ -84,15 +86,20 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
     }
 
     try {
-      await this.stateStore.load();
+      const recoveredFile = await this.stateStore.load();
+      if (recoveredFile) {
+        this.log.warn("Invalid switch state preserved at %s. Using configured default states.", recoveredFile);
+      }
       this.logStartupSummary(this.normalizedConfig);
+
+      await this.syncAccessories(this.normalizedConfig);
+      if (this.shuttingDown) return;
 
       if (this.normalizedConfig.buttons.length === 0 && this.normalizedConfig.switches.length === 0) {
         this.log.warn("No buttons or switches configured. HTTP server will not start until the plugin is configured.");
         return;
       }
 
-      this.syncAccessories(this.normalizedConfig);
       await this.startServer(this.normalizedConfig);
     } catch (error) {
       this.log.error("Startup failed: %s", this.formatError(error));
@@ -100,25 +107,24 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
   }
 
   private async handleShutdown(): Promise<void> {
-    for (const accessory of this.switches.values()) {
-      accessory.shutdown();
+    this.shuttingDown = true;
+    await this.launchTask;
+    if (this.server) {
+      const server = this.server;
+      await new Promise<void>(resolve => {
+        const timeout = setTimeout(() => server.closeAllConnections(), 5000);
+        timeout.unref();
+        server.close(() => { clearTimeout(timeout); resolve(); });
+      });
+      this.server = undefined;
     }
-
+    await Promise.all([...this.switches.values()].map(accessory => accessory.shutdown()));
+    await this.stateStore.flush();
     this.switches.clear();
     this.buttons.clear();
-
-    if (this.server == null) {
-      return;
-    }
-
-    await new Promise<void>((resolve) => {
-      this.server?.close(() => resolve());
-    });
-
-    this.server = undefined;
   }
 
-  private syncAccessories(config: NormalizedConfig): void {
+  private async syncAccessories(config: NormalizedConfig): Promise<void> {
     const desiredUuids = new Set<string>();
     const createdAccessories: PlatformAccessory<AccessoryContext>[] = [];
     const updatedAccessories: PlatformAccessory<AccessoryContext>[] = [];
@@ -141,6 +147,7 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
     }
 
     for (const definition of config.switches) {
+      if (definition.mode === "momentary") await this.stateStore.delete(definition.routeId);
       const uuid = this.generateUuid(definition.identitySeed);
       desiredUuids.add(uuid);
 
@@ -163,8 +170,8 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
       const routeId = staleAccessory.context.routeId;
       if (staleAccessory.context.kind === "switch" && routeId != null) {
         const existing = this.switches.get(routeId);
-        existing?.shutdown();
-        void this.stateStore.delete(routeId);
+        await existing?.shutdown();
+        await this.stateStore.delete(routeId);
         this.switches.delete(routeId);
       }
 
@@ -251,6 +258,10 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
     res: ServerResponse,
     config: NormalizedConfig,
   ): Promise<void> {
+    if (this.shuttingDown) {
+      this.sendJson(res, 503, { error: "Server is shutting down." });
+      return;
+    }
     const method = (req.method ?? "GET").toUpperCase();
 
     if (method !== "GET" && method !== "POST") {
@@ -259,7 +270,7 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
     }
 
     try {
-      const url = new URL(req.url ?? "/", `http://${req.headers.host ?? `${config.host}:${config.port}`}`);
+      const url = new URL(req.url ?? "/", "http://localhost");
       const route = parseRoute(url.pathname);
 
       if (route.kind === "not-found") {
@@ -308,6 +319,10 @@ export class ButtonTriggersPlatform implements DynamicPlatformPlugin {
           this.sendJson(res, 404, { error: "Route not found." });
       }
     } catch (error) {
+      if (error instanceof URIError || (error instanceof TypeError && "code" in error && error.code === "ERR_INVALID_URL")) {
+        this.sendJson(res, 400, { error: "Malformed URL." });
+        return;
+      }
       if (error instanceof RequestBodyParseError) {
         this.sendJson(res, 422, { error: error.message });
         return;
