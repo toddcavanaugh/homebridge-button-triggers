@@ -20,3 +20,5 @@ export const BUTTON_EVENT_ALIASES = {
   hold: "long",
   "long-press": "long",
 } as const;
+
+export const MAX_RESET_MS = 2_147_483_647;

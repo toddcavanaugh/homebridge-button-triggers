@@ -1,4 +1,5 @@
 import {
+  MAX_RESET_MS,
   DEFAULT_HOST,
   DEFAULT_MOMENTARY_RESET_MS,
   DEFAULT_NAME,
@@ -172,6 +173,7 @@ function normalizeButton(value: RawButtonInput, index: number, issues: string[])
 
   const id = normalizeOptionalString(value.id, `buttons[${index}].id`, issues);
   if (id == null) {
+    if (value.id == null) issues.push(`Accessory at index ${index} requires an id.`);
     return [];
   }
 
@@ -218,6 +220,7 @@ function normalizeSwitch(value: RawSwitchInput, index: number, issues: string[])
 
   const id = normalizeOptionalString(value.id, `switches[${index}].id`, issues);
   if (id == null) {
+    if (value.id == null) issues.push(`Accessory at index ${index} requires an id.`);
     return [];
   }
 
@@ -283,6 +286,10 @@ function normalizeResetAfterMs(
   if (resetAfterMs < 0) {
     issues.push(`switches[${index}].resetAfterMs must not be negative.`);
     return DEFAULT_MOMENTARY_RESET_MS;
+  }
+
+  if (resetAfterMs > MAX_RESET_MS) {
+    issues.push(`switches[${index}].resetAfterMs must not exceed ${MAX_RESET_MS}.`);
   }
 
   return resetAfterMs;

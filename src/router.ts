@@ -55,7 +55,9 @@ export function normalizeButtonEvent(value: unknown): ButtonEvent | undefined {
   }
 
   const normalized = value.trim().toLowerCase();
-  return BUTTON_EVENT_ALIASES[normalized as keyof typeof BUTTON_EVENT_ALIASES];
+  return Object.hasOwn(BUTTON_EVENT_ALIASES, normalized)
+    ? BUTTON_EVENT_ALIASES[normalized as keyof typeof BUTTON_EVENT_ALIASES]
+    : undefined;
 }
 
 export function coerceBoolean(value: unknown): boolean | undefined {
@@ -107,11 +109,12 @@ export async function readRequestBody(req: IncomingMessage): Promise<Record<stri
   const chunks: Buffer[] = [];
   let bytesRead = 0;
 
-  for await (const chunk of req) {
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     bytesRead += buffer.length;
 
     if (bytesRead > MAX_BODY_BYTES) {
+      req.resume();
       throw new RequestBodyParseError(`Request body exceeds ${MAX_BODY_BYTES} bytes.`);
     }
 

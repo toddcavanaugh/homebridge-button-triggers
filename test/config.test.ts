@@ -79,3 +79,16 @@ test("duplicate normalized button ids are rejected", () => {
     },
   );
 });
+
+test("missing and null accessory IDs are errors", () => {
+  for (const key of ["buttons", "switches"]) {
+    for (const entry of [{ name: "Missing" }, { id: null }]) {
+      assert.throws(() => normalizeConfig({ [key]: [entry] }), ConfigValidationError);
+    }
+  }
+});
+
+test("momentary timers enforce the Node timer maximum", () => {
+  assert.throws(() => normalizeConfig({ switches: [{ id: "pulse", mode: "momentary", resetAfterMs: 2147483648 }] }), ConfigValidationError);
+  assert.equal(normalizeConfig({ switches: [{ id: "pulse", resetAfterMs: 2147483647 }] }).switches[0]?.resetAfterMs, 2147483647);
+});

@@ -96,7 +96,8 @@ curl 'http://127.0.0.1:3001/switches/stream-lights/toggle?token=replace-with-a-l
 ### Read current state
 
 ```bash
-curl 'http://127.0.0.1:3001/switches/stream-lights'
+curl 'http://127.0.0.1:3001/switches/stream-lights' \
+  -H 'Authorization: Bearer replace-with-a-long-random-token'
 ```
 
 > Tip: quote URLs that contain `?` or `&` so shells like zsh do not try to interpret them.
@@ -261,3 +262,11 @@ npm test
 - optional auth token support
 - switch persistence and momentary mode
 - compatibility helpers for `homebridge-button-platform`
+
+## Persistence and recovery
+
+Stateful changes are acknowledged after their state is saved. Concurrent saves are serialized and batched, and unchanged states skip disk writes. If a save fails, the command returns an error and the switch retains its previous state.
+
+A malformed state file is preserved beside the original with a `.corrupt-` suffix. Startup logs its location and initializes stateful switches from `defaultState` (false when omitted). Momentary switches start at their configured default and reset delays must be between 1 and 2147483647 milliseconds.
+
+All routes except `/health` require authentication when `authToken` is configured, including state reads.

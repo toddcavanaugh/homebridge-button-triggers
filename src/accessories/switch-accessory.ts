@@ -10,6 +10,8 @@ interface HapContext {
 export class VirtualSwitchAccessory {
   private readonly service: HomebridgeService;
   private currentState: boolean;
+  private operations: Promise<unknown> = Promise.resolve();
+  private stopped = false;
   private resetTimer: NodeJS.Timeout | undefined;
 
   constructor(
@@ -59,41 +61,45 @@ export class VirtualSwitchAccessory {
   }
 
   async toggle(): Promise<boolean> {
-    return this.setState(!this.currentState);
+    return this.enqueue(() => !this.currentState);
   }
 
   async setState(nextState: boolean, options: { fromHomeKit?: boolean } = {}): Promise<boolean> {
-    this.currentState = nextState;
-
-    if (!options.fromHomeKit) {
-      this.service.updateCharacteristic(this.hap.Characteristic.On, this.currentState);
-    }
-
-    if (this.definition.mode === "stateful") {
-      await this.stateStore.set(this.definition.routeId, this.currentState);
-      this.clearResetTimer();
-      return this.currentState;
-    }
-
-    await this.stateStore.delete(this.definition.routeId);
-
-    if (this.currentState === this.definition.defaultState) {
-      this.clearResetTimer();
-      return this.currentState;
-    }
-
-    this.scheduleReset();
-    return this.currentState;
+    return this.enqueue(() => nextState, options);
   }
 
-  shutdown(): void {
+  async shutdown(): Promise<void> {
+    this.stopped = true;
     this.clearResetTimer();
+    await this.operations;
+  }
+
+  private enqueue(next: () => boolean, options: { fromHomeKit?: boolean } = {}): Promise<boolean> {
+    if (this.stopped) return Promise.reject(new Error("Switch is shutting down."));
+    const operation = this.operations.then(async () => {
+      const nextState = next();
+      if (this.definition.mode === "stateful") {
+        await this.stateStore.set(this.definition.routeId, nextState);
+      }
+      this.currentState = nextState;
+      if (!options.fromHomeKit) {
+        this.service.updateCharacteristic(this.hap.Characteristic.On, nextState);
+      }
+      this.clearResetTimer();
+      if (this.definition.mode === "momentary" && nextState !== this.definition.defaultState && !this.stopped) {
+        this.scheduleReset();
+      }
+      return nextState;
+    });
+    this.operations = operation.catch(() => undefined);
+    return operation;
   }
 
   private scheduleReset(): void {
     this.clearResetTimer();
     this.resetTimer = setTimeout(() => {
-      void this.setState(this.definition.defaultState);
+      // Momentary resets are memory-only; shutdown cancels this timer.
+      void this.setState(this.definition.defaultState).catch(() => undefined);
     }, this.definition.resetAfterMs);
     this.resetTimer.unref?.();
   }
